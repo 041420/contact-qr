@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>連絡先を追加</title>
+<style>
+  :root{
+    --ink:#141821;
+    --ink-60:#5b6472;
+    --paper:#f6f6f3;
+    --card:#ffffff;
+    --rule:#e4e4df;
+    --accent:#1f6f4a;
+    --accent-dark:#175537;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",
+                "Noto Sans JP","Yu Gothic",sans-serif;
+    line-height:1.7;
+    -webkit-text-size-adjust:100%;
+    display:flex;
+    justify-content:center;
+    padding:34px 20px 60px;
+  }
+  main{width:100%;max-width:400px}
+
+  .eyebrow{
+    margin:0 0 14px;
+    font-size:11px;
+    letter-spacing:.2em;
+    color:var(--ink-60);
+  }
+
+  /* 名刺を模したカード：左辺のアクセント罫がこのページの目印 */
+  .card{
+    position:relative;
+    background:var(--card);
+    border:1px solid var(--rule);
+    border-left:3px solid var(--accent);
+    border-radius:2px;
+    padding:22px 22px 20px;
+  }
+  .org{
+    margin:0;
+    font-size:12px;
+    color:var(--ink-60);
+    min-height:1.7em;
+  }
+  .name{
+    margin:2px 0 0;
+    font-size:21px;
+    font-weight:600;
+    letter-spacing:.02em;
+    min-height:1.4em;
+  }
+  .card hr{
+    border:0;
+    border-top:1px solid var(--rule);
+    margin:16px 0 14px;
+  }
+  .tel-label{
+    margin:0;
+    font-size:10px;
+    letter-spacing:.16em;
+    color:var(--ink-60);
+  }
+  .tel{
+    margin:2px 0 0;
+    font-size:23px;
+    font-weight:600;
+    font-variant-numeric:tabular-nums;
+    letter-spacing:.03em;
+    min-height:1.4em;
+  }
+
+  .status{
+    margin:14px 0 0;
+    font-size:12px;
+    color:var(--ink-60);
+  }
+
+  .btn{
+    display:block;
+    margin:22px 0 0;
+    padding:16px 20px;
+    background:var(--accent);
+    color:#fff;
+    font-size:17px;
+    font-weight:600;
+    text-align:center;
+    text-decoration:none;
+    border-radius:2px;
+  }
+  .btn:active{background:var(--accent-dark)}
+  .btn:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
+  .alt{margin:14px 0 0;text-align:center;font-size:13px}
+  .alt a{color:var(--accent)}
+
+  .note{
+    margin:30px 0 0;
+    padding-top:16px;
+    border-top:1px solid var(--rule);
+    font-size:12px;
+    line-height:1.9;
+    color:var(--ink-60);
+  }
+  .note b{color:var(--ink);font-weight:600}
+</style>
+</head>
+<body>
+<main>
+
+  <p class="eyebrow">CONTACT</p>
+
+  <section class="card">
+    <p class="org"  id="org"></p>
+    <p class="name" id="name">読み込み中...</p>
+    <hr>
+    <p class="tel-label">TEL</p>
+    <p class="tel"  id="tel">&nbsp;</p>
+  </section>
+
+  <p class="status" id="status"></p>
+
+  <!--
+    ▼▼▼ ここだけ書き換えてください ▼▼▼
+    GASウェブアプリの /exec URL に ?mode=vcf を付けたものを href に入れます。
+    （JavaScript が動かない環境でも、このボタンだけは必ず機能します）
+  -->
+  <a class="btn" id="vcf"
+     href="https://script.google.com/macros/s/AKfycbwlt5HBuywo0DaH3WELr9raTyI5FbqKTEgtyi_0uwD5sd1JHDDKxWai3DBfrQbhHAmQcw/exec?mode=vcf">連絡先に追加</a>
+  <!-- ▲▲▲ ここだけ書き換えてください ▲▲▲ -->
+
+  <p class="alt" id="alt" hidden>
+    <a id="altlink" href="#">追加画面が開かないときはこちら</a>
+  </p>
+
+  <p class="note">
+    <b>iPhone</b>：ボタンを押すと連絡先の追加画面が開きます。<br>
+    <b>Android</b>：連絡先アプリの新規登録画面が開くので、最後に保存を押してください。<br>
+    QRコードアプリ内のブラウザではうまく動かないことがあります。その場合は Chrome や Safari で開いてください。
+  </p>
+
+</main>
+
+<script>
+(function () {
+  var vcfBtn  = document.getElementById('vcf');
+  var elName   = document.getElementById('name');
+  var elOrg    = document.getElementById('org');
+  var elTel    = document.getElementById('tel');
+  var elStatus = document.getElementById('status');
+  var elAlt    = document.getElementById('alt');
+  var elAltLnk = document.getElementById('altlink');
+
+  // ボタンの href から GAS のベースURLを取り出す（編集箇所を1か所にするため）
+  var vcfUrl = vcfBtn.getAttribute('href');
+  var base   = vcfUrl.split('?')[0];
+
+  var isAndroid = /android/i.test(navigator.userAgent);
+  var loaded = false;
+
+  // Android 連絡先追加インテントを組み立てる
+  function buildIntent(c) {
+    var p = [
+      'intent:#Intent',
+      'action=android.intent.action.INSERT',
+      'type=vnd.android.cursor.item/contact'
+    ];
+    if (c.name)    p.push('S.name='    + encodeURIComponent(c.name));
+    if (c.phone)   p.push('S.phone='   + encodeURIComponent(c.phone));
+    if (c.email)   p.push('S.email='   + encodeURIComponent(c.email));
+    if (c.company) p.push('S.company=' + encodeURIComponent(c.company));
+    p.push('S.browser_fallback_url=' + encodeURIComponent(vcfUrl));
+    p.push('end');
+    return p.join(';');
+  }
+
+  // JSONP のコールバック（GAS から呼ばれる）
+  window.__renderContact = function (c) {
+    if (loaded) return;
+    loaded = true;
+    c = c || {};
+
+    elName.textContent = c.name  || '連絡先';
+    elOrg.textContent  = c.company || '';
+    elTel.textContent  = c.phone || '';
+    elStatus.textContent = '';
+
+    if (isAndroid) {
+      // Android のみ、ボタンの遷移先をインテントに差し替える
+      vcfBtn.setAttribute('href', buildIntent(c));
+      elAltLnk.setAttribute('href', vcfUrl);
+      elAlt.hidden = false;
+    }
+  };
+
+  function fail() {
+    if (loaded) return;
+    loaded = true;
+    elName.textContent = '連絡先';
+    elTel.textContent  = '';
+    elStatus.textContent =
+      '連絡先情報を読み込めませんでした。下のボタンから追加できます。';
+  }
+
+  var s = document.createElement('script');
+  s.src = base + '?mode=jsonp&callback=__renderContact&t=' + Date.now();
+  s.onerror = fail;
+  document.head.appendChild(s);
+  setTimeout(fail, 10000);
+})();
+</script>
+</body>
+</html>
